@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>專注力與肢體協調訓練系統</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap');
+        
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #f0fdfa;
+            user-select: none;
+            overflow: hidden; /* 防止大螢幕投影時誤觸捲動 */
+        }
+
+        .shape-shadow {
+            filter: drop-shadow(0 15px 25px rgba(0, 0, 0, 0.3));
+        }
+
+        .progress-bar-transition {
+            transition: width 0.05s linear;
+        }
+
+        /* 倒數計時警告動畫 */
+        @keyframes pulse-danger {
+            0%, 100% { color: #ef4444; transform: scale(1); text-shadow: 0 0 20px rgba(239, 68, 68, 0.5); }
+            50% { color: #b91c1c; transform: scale(1.05); text-shadow: 0 0 40px rgba(239, 68, 68, 0.8); }
+        }
+        .timer-danger {
+            animation: pulse-danger 1s infinite;
+        }
+
+        /* 換圖時的彈跳動畫 */
+        @keyframes popIn {
+            0% { transform: scale(0.3); opacity: 0; }
+            60% { transform: scale(1.15); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-pop {
+            animation: popIn 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+
+        /* 大螢幕倒數 321 動畫 */
+        @keyframes giantPulse {
+            0% { transform: scale(0.5); opacity: 0; }
+            20% { transform: scale(1.2); opacity: 1; }
+            80% { transform: scale(1); opacity: 1; }
+            100% { transform: scale(0.8); opacity: 0; }
+        }
+        .animate-countdown {
+            animation: giantPulse 1s ease-in-out forwards;
+        }
+
+        /* 動作卡片狀態 */
+        .action-card {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+        }
+        .action-card.selected {
+            border-color: #0d9488;
+            background-color: #ffffff;
+            box-shadow: 0 10px 15px -3px rgba(13, 148, 136, 0.15), 0 4px 6px -4px rgba(13, 148, 136, 0.1);
+        }
+        .action-card.unselected {
+            border-color: #e2e8f0;
+            background-color: #f8fafc;
+            opacity: 0.45;
+            filter: grayscale(85%);
+            transform: scale(0.97);
+        }
+    </style>
+</head>
+<body class="w-screen h-screen flex flex-col items-center justify-center text-slate-800">
+
+    <!-- 頂部跑馬燈提示列 -->
+    <div class="fixed top-0 left-0 w-full bg-teal-700 text-teal-50 py-2 z-50 text-center text-sm md:text-base font-bold tracking-widest shadow-md">
+        <span id="bannerText" class="transition-opacity duration-500 opacity-100 inline-block">
+            ⚡ 大腦已連線！眼睛看圖形、大腦快速反應、身體精準連動！
+        </span>
+    </div>
+
+    <!-- 浮水印背景 (大腦、運動、心跳) -->
+    <div class="fixed inset-0 pointer-events-none opacity-[0.05] text-teal-900 overflow-hidden z-0 mt-8">
+        <i class="fa-solid fa-brain absolute -top-10 -left-10 text-[260px]"></i>
+        <i class="fa-solid fa-person-running absolute top-12 -right-8 text-[280px]"></i>
+        <i class="fa-solid fa-dumbbell absolute -bottom-16 left-12 text-[260px] rotate-[-20deg]"></i>
+        <i class="fa-solid fa-heart-pulse absolute -bottom-12 right-20 text-[240px]"></i>
+        <i class="fa-solid fa-bolt absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[320px]"></i>
+    </div>
+
+    <!-- 畫面 1：設定畫面 (Setup Screen) -->
+    <div id="setupScreen" class="w-full h-full flex flex-col items-center p-4 md:p-8 max-w-6xl mx-auto overflow-y-auto relative z-10 mt-12 pb-20">
+        <header class="text-center mb-6 mt-4">
+            <h1 class="text-4xl md:text-5xl font-black text-teal-800 tracking-wider mb-3">專注力與肢體協調訓練</h1>
+            <p class="text-base md:text-lg text-slate-600 font-bold flex items-center justify-center gap-2">
+                <i class="fa-solid fa-hand-pointer text-teal-600"></i>
+                請點選卡片自訂動作組合（最少選 3 種），幫助大腦與肢體快速連線！
+            </p>
+            <div class="mt-3 flex items-center justify-center gap-3">
+                <span id="selectedCountBadge" class="bg-teal-100 text-teal-800 text-sm font-bold px-3 py-1.5 rounded-full border border-teal-300 shadow-sm">
+                    已選取：8 / 8 項動作
+                </span>
+                <button type="button" onclick="selectAllShapes()" class="text-sm font-bold text-teal-700 hover:text-teal-900 bg-white border border-teal-200 hover:border-teal-400 px-4 py-1.5 rounded-lg transition shadow-sm">
+                    <i class="fa-solid fa-check-double mr-1"></i>全選
+                </button>
+                <button type="button" onclick="selectPresetThree()" class="text-sm font-bold text-slate-600 hover:text-slate-800 bg-white border border-slate-200 hover:border-slate-300 px-4 py-1.5 rounded-lg transition shadow-sm">
+                    <i class="fa-solid fa-dice mr-1"></i>隨機選3項
+                </button>
+            </div>
+        </header>
+
+        <!-- 圖形與動作清單 -->
+        <div id="legendGrid" class="grid grid-cols-2 md:grid-cols-4 gap-4 w-full mb-8">
+            <!-- 透過 JS 動態產生 -->
+        </div>
+
+        <!-- 設定控制面板 -->
+        <div class="bg-white/95 backdrop-blur p-6 rounded-3xl shadow-xl w-full max-w-4xl border-2 border-teal-100 flex flex-col gap-6">
+            
+            <div class="flex flex-wrap items-center justify-center gap-6 w-full">
+                <div class="flex flex-col gap-2 w-[45%] md:w-auto">
+                    <label for="totalTime" class="text-sm md:text-base font-bold text-slate-700">總時長</label>
+                    <select id="totalTime" class="text-xl md:text-2xl p-2.5 border-2 border-slate-300 rounded-xl focus:border-teal-500 outline-none font-black bg-slate-50 text-slate-800">
+                        <option value="60">1 分鐘</option>
+                        <option value="120">2 分鐘</option>
+                        <option value="180" selected>3 分鐘 (★最佳推薦)</option>
+                        <option value="240">4 分鐘</option>
+                        <option value="300">5 分鐘</option>
+                    </select>
+                </div>
+
+                <div class="flex flex-col gap-2 w-[45%] md:w-auto">
+                    <label for="shapeDuration" class="text-sm md:text-base font-bold text-slate-700">切換速度</label>
+                    <select id="shapeDuration" class="text-xl md:text-2xl p-2.5 border-2 border-slate-300 rounded-xl focus:border-teal-500 outline-none font-black bg-slate-50 text-slate-800">
+                        <option value="1.5">1.5 秒 (極速)</option>
+                        <option value="2">2.0 秒</option>
+                        <option value="2.5" selected>2.5 秒 (★專注節奏)</option>
+                        <option value="3">3.0 秒 (標準)</option>
+                        <option value="4">4.0 秒</option>
+                    </select>
+                </div>
+
+                <div class="flex flex-col gap-2 w-[45%] md:w-auto">
+                    <label for="hintCount" class="text-sm md:text-base font-bold text-slate-700">文字提示次數</label>
+                    <select id="hintCount" class="text-xl md:text-2xl p-2.5 border-2 border-slate-300 rounded-xl focus:border-teal-500 outline-none font-black bg-slate-50 text-slate-800">
+                        <option value="5">前 5 次</option>
+                        <option value="10" selected>前 10 次 (★考驗記憶)</option>
+                        <option value="15">前 15 次</option>
+                    </select>
+                </div>
+
+                <div class="flex flex-col gap-2 w-[45%] md:w-auto items-center justify-center">
+                    <label class="text-sm md:text-base font-bold text-slate-700 mb-1">節奏律動音效</label>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="rhythmToggle" class="sr-only peer" checked onchange="updateRhythmLabel()">
+                        <div class="w-14 h-7 bg-slate-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-teal-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-teal-500 shadow-inner"></div>
+                        <span class="ml-3 text-base font-black text-teal-700" id="rhythmLabel">開啟</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- 底部動作按鈕區 -->
+            <div class="flex flex-col items-center justify-center w-full mt-4 border-t border-slate-200 pt-6">
+                <button id="startBtn" onclick="initiateWarmup()" class="w-full md:w-80 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-600 hover:to-emerald-600 text-white font-black text-2xl md:text-3xl py-4 px-10 rounded-2xl shadow-xl hover:shadow-2xl hover:-translate-y-1 transition transform flex items-center justify-center gap-3 disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none border border-teal-400">
+                    <i class="fas fa-play"></i> 開始訓練
+                </button>
+                <span id="startWarning" class="text-sm text-rose-600 font-bold mt-3 hidden bg-rose-100 px-4 py-1.5 rounded-full border border-rose-300 shadow-sm">
+                    <i class="fa-solid fa-triangle-exclamation mr-1"></i>最少請選擇 3 個動作！
+                </span>
+
+                <div class="mt-6 flex flex-col items-center">
+                    <p class="text-xs text-teal-600 font-bold mb-2">想要直接體驗最佳訓練效果？</p>
+                    <button onclick="setGoldenMode()" class="bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600 text-white shadow-md font-bold text-sm md:text-base px-8 py-2 rounded-full transition transform hover:scale-105 active:scale-95 flex items-center gap-2">
+                        一鍵載入黃金專注模式
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 畫面 1.2：訓練前小叮嚀畫面 (10s Tips Screen) -->
+    <div id="tipsScreen" class="w-full h-full hidden flex flex-col items-center justify-center bg-slate-900 absolute inset-0 z-50 px-4 py-6 overflow-y-auto">
+        <h2 class="text-3xl md:text-5xl font-black text-amber-400 mb-8 tracking-widest drop-shadow-md">
+            <i class="fa-solid fa-circle-exclamation mr-3"></i>訓練前小叮嚀
+        </h2>
+        
+        <div class="max-w-4xl w-full bg-slate-800/90 backdrop-blur border border-slate-700 rounded-3xl p-6 md:p-10 shadow-2xl flex flex-col gap-6 md:gap-8 text-left">
+            
+            <!-- 叮嚀 1 -->
+            <div class="flex items-start gap-4 md:gap-6 bg-slate-900/50 p-4 md:p-5 rounded-2xl border border-slate-700/50">
+                <div class="w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-blue-500/20 text-blue-400 flex items-center justify-center text-3xl md:text-4xl flex-shrink-0 border border-blue-500/30">
+                    <i class="fa-solid fa-person-arrow-up"></i>
+                </div>
+                <div class="flex flex-col justify-center min-h-[3.5rem]">
+                    <h3 class="text-2xl md:text-3xl font-black text-white">1. 全班站起來</h3>
+                </div>
+            </div>
+
+            <!-- 叮嚀 2 -->
+            <div class="flex items-start gap-4 md:gap-6 bg-slate-900/50 p-4 md:p-5 rounded-2xl border border-slate-700/50">
+                <div class="w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-yellow-500/20 text-yellow-400 flex items-center justify-center text-3xl md:text-4xl flex-shrink-0 border border-yellow-500/30">
+                    <i class="fa-solid fa-people-arrows"></i>
+                </div>
+                <div>
+                    <h3 class="text-2xl md:text-3xl font-black text-white mb-2">2. 保持安全距離</h3>
+                    <p class="text-base md:text-xl text-slate-300 font-bold leading-relaxed">請學生在座位旁邊「錯開站立」，避免手揮到旁邊同學！</p>
+                </div>
+            </div>
+
+            <!-- 叮嚀 3 -->
+            <div class="flex items-start gap-4 md:gap-6 bg-slate-900/50 p-4 md:p-5 rounded-2xl border border-slate-700/50">
+                <div class="w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-pink-500/20 text-pink-400 flex items-center justify-center text-3xl md:text-4xl flex-shrink-0 border border-pink-500/30">
+                    <i class="fa-solid fa-brain"></i>
+                </div>
+                <div>
+                    <h3 class="text-2xl md:text-3xl font-black text-white mb-2">3. 做錯是好事</h3>
+                    <p class="text-base md:text-xl text-slate-300 font-bold leading-relaxed">
+                        文字提示消失時，會有大腦「當機」或做錯動作是非常正常的情形！
+                        <span class="text-pink-300 underline decoration-pink-500/50 underline-offset-4">正是你的大腦在長出新神經元的時刻！</span>
+                        請不要理會也不要停擺！努力繼續跟上動作就對了！
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 10秒進度條與跳過按鈕 -->
+        <div class="w-full max-w-4xl mt-8 bg-slate-800 rounded-full h-3 md:h-4 overflow-hidden border border-slate-700 shadow-inner">
+            <div id="tipsProgressBar" class="bg-gradient-to-r from-amber-400 to-orange-500 h-full w-full"></div>
+        </div>
+        <p class="text-slate-400 mt-4 font-bold text-lg"><span id="tipsCountdownText" class="text-amber-400 font-black text-2xl mx-1">10</span> 秒後自動開始挑戰...</p>
+        
+        <button onclick="skipTips()" class="mt-6 px-8 py-2.5 rounded-full border-2 border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white hover:border-slate-500 font-bold transition flex items-center gap-2">
+            跳過叮嚀直接開始 <i class="fa-solid fa-forward-step"></i>
+        </button>
+    </div>
+
+    <!-- 畫面 1.5：預備倒數畫面 (Countdown Screen) -->
+    <div id="countdownScreen" class="w-full h-full hidden flex flex-col items-center justify-center bg-slate-900 absolute inset-0 z-50">
+        <h2 class="text-4xl md:text-5xl font-bold text-teal-400 mb-8 tracking-widest uppercase">準備動作</h2>
+        <div id="countdownText" class="text-[180px] md:text-[250px] font-black text-white drop-shadow-[0_0_40px_rgba(45,212,191,0.6)]">
+            3
+        </div>
+    </div>
+
+    <!-- 畫面 2：訓練畫面 (Training Screen) -->
+    <div id="trainingScreen" class="w-full h-full hidden flex flex-col bg-slate-900 relative">
+        
+        <!-- 頂部資訊與控制列 -->
+        <div class="absolute top-0 left-0 w-full p-4 md:p-6 flex justify-between items-start z-10 pointer-events-none">
+            <div class="bg-slate-800/80 backdrop-blur border border-slate-700 rounded-2xl p-4 md:px-8 shadow-2xl pointer-events-auto">
+                <p class="text-slate-400 text-sm md:text-base font-bold tracking-widest uppercase mb-1">剩餘時間</p>
+                <div id="mainTimer" class="text-6xl md:text-8xl font-black text-white tabular-nums tracking-tight drop-shadow-md">00:00</div>
+            </div>
+            
+            <div class="flex flex-col gap-3 pointer-events-auto">
+                <button onclick="toggleFullScreen()" class="bg-slate-700/50 hover:bg-slate-700 border-2 border-slate-600 text-slate-200 font-bold text-lg md:text-xl py-3 px-6 rounded-xl transition flex items-center justify-center gap-2 backdrop-blur shadow-lg">
+                    <i class="fa-solid fa-expand"></i> 全螢幕投影
+                </button>
+                <button onclick="stopTraining()" class="bg-red-500/20 hover:bg-red-500/50 border-2 border-red-500/80 text-red-100 font-bold text-lg md:text-xl py-3 px-6 rounded-xl transition flex items-center justify-center gap-2 backdrop-blur shadow-lg">
+                    <i class="fas fa-stop"></i> 結束訓練
+                </button>
+            </div>
+        </div>
+
+        <!-- 畫面中央：巨型圖形與動作文字 -->
+        <div class="flex-grow flex flex-col items-center justify-center w-full px-4 relative z-0 mt-20 md:mt-0">
+            
+            <div id="activeShapeContainer" class="w-[clamp(240px,35vw,450px)] h-[clamp(240px,35vw,450px)] flex items-center justify-center mb-8 shape-shadow">
+                <!-- SVG 會透過 JS 插入 -->
+            </div>
+            
+            <div id="actionTextContainer" class="flex flex-col items-center justify-center min-h-[160px] transition-opacity duration-300">
+                <div id="activeActionText" class="text-[60px] md:text-[90px] lg:text-[110px] font-black text-white text-center tracking-wider drop-shadow-2xl">
+                    動作名稱
+                </div>
+                <div id="actionHintBadge" class="mt-4 px-6 py-2 rounded-full text-base md:text-xl font-bold bg-teal-500/20 border border-teal-400/50 text-teal-200 backdrop-blur">
+                    <i class="fa-solid fa-lightbulb mr-2 text-yellow-300"></i>提示 1 / 10
+                </div>
+            </div>
+        </div>
+
+        <!-- 底部進度條 -->
+        <div class="w-full h-6 md:h-8 bg-slate-800 relative z-10 border-t border-slate-700">
+            <div id="shapeProgressBar" class="h-full bg-teal-400 progress-bar-transition w-0 shadow-[0_0_20px_rgba(45,212,191,0.6)]"></div>
+        </div>
+    </div>
+
+    <!-- 畫面 3：結算與復盤畫面 (End Screen) -->
+    <div id="endScreen" class="w-full h-full hidden flex flex-col items-center justify-center bg-gradient-to-br from-teal-700 to-blue-800 relative overflow-y-auto pt-10 pb-10">
+        <div class="bg-white/10 backdrop-blur-md p-8 md:p-12 rounded-3xl border border-white/20 text-center shadow-2xl z-10 flex flex-col items-center max-w-5xl mx-4 mt-12 md:mt-0">
+            <h2 class="text-4xl md:text-6xl font-black text-white mb-4 drop-shadow-lg flex items-center gap-4">
+                <i class="fas fa-medal text-yellow-300 drop-shadow-[0_0_20px_rgba(253,224,71,0.8)]"></i>
+                訓練完成！
+                <i class="fas fa-medal text-yellow-300 drop-shadow-[0_0_20px_rgba(253,224,71,0.8)]"></i>
+            </h2>
+            <p class="text-xl md:text-3xl font-bold text-teal-100 mb-8 drop-shadow">全班表現超棒！現在來測試一下記憶力！</p>
+            
+            <div class="bg-slate-900/60 p-6 rounded-2xl border border-slate-700 w-full mb-10">
+                <h3 class="text-2xl font-black text-teal-300 mb-6 border-b border-slate-600 pb-3">今日訓練復盤對照表</h3>
+                <div id="reviewGrid" class="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+                    <!-- JS 動態產生 -->
+                </div>
+            </div>
+
+            <button onclick="resetApp()" class="bg-white text-teal-800 hover:bg-slate-100 font-black text-2xl py-4 px-12 rounded-full shadow-xl hover:shadow-2xl hover:-translate-y-1 transition transform flex items-center gap-3 border-2 border-teal-200">
+                <i class="fas fa-home"></i> 返回首頁設定
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const shapeData = [
+            { id: 1, name: '圓形', action: '半蹲', color: '#FF5722', svg: '<circle cx="50" cy="50" r="45" fill="currentColor"/>' },
+            { id: 2, name: '心型', action: '開合跳', color: '#E91E63', svg: '<path d="M50 85C50 85 10 55 10 30C10 15 25 5 40 15C50 25 50 25 50 25C50 25 50 25 60 15C75 5 90 15 90 30C90 55 50 85 50 85Z" fill="currentColor"/>' },
+            { id: 3, name: '三角形', action: '拍手', color: '#4CAF50', svg: '<polygon points="50,10 90,90 10,90" fill="currentColor"/>' },
+            { id: 4, name: '菱形', action: '左手拍右腳膝蓋', color: '#9C27B0', svg: '<polygon points="50,5 95,50 50,95 5,50" fill="currentColor"/>' },
+            { id: 5, name: '星形', action: '右手拍左腳膝蓋', color: '#FFC107', svg: '<polygon points="50,5 61,35 98,35 68,57 79,91 50,70 21,91 32,57 2,35 39,35" fill="currentColor"/>' },
+            { id: 6, name: '正方形', action: '剪刀腳', color: '#2196F3', svg: '<rect x="15" y="15" width="70" height="70" rx="10" fill="currentColor"/>' },
+            { id: 7, name: '六角形', action: '雙手高舉過頭', color: '#00BCD4', svg: '<polygon points="25,10 75,10 95,50 75,90 25,90 5,50" fill="currentColor"/>' },
+            { id: 8, name: '十字形', action: '左右出拳', color: '#795548', svg: '<path d="M35 5 H65 V35 H95 V65 H65 V95 H35 V65 H5 V35 H35 Z" fill="currentColor"/>' }
+        ];
+
+        let selectedShapeIds = new Set(shapeData.map(s => s.id));
+        let activeTrainingShapes = [];
+
+        // 狀態與計時器變數
+        let totalTimeSeconds = 0;
+        let shapeDurationSeconds = 0;
+        let hintMaxCount = 0;
+        let playRhythm = true;
+        let mainTimerInterval;
+        let progressInterval;
+        let tipsInterval;
+        let tipsTimeout;
+        let currentShapeStartTime = 0;
+        let currentShapeIndex = -1;
+        let shapeCount = 0; 
+        let audioCtx = null;
+
+        const bannerTips = [
+            "⚡ 大腦已連線！眼睛看圖形、大腦快速反應、身體精準連動！",
+            "🧠 文字消失後才是真正的考驗！挑戰工作記憶極限！",
+            "🔥 跟上 2.5 秒黃金節奏，喚醒身體活力與全天專注力！",
+            "💪 保持平穩呼吸，動作確實到位，專注當下每一秒！",
+            "✨ 做錯動作沒關係！那是大腦正在長出新神經元的時刻！",
+            "👀 眼睛盯緊圖案，讓大腦與肢體快速連結！"
+        ];
+        let bannerIdx = 0;
+        setInterval(() => {
+            const el = document.getElementById('bannerText');
+            if (el) {
+                el.style.opacity = 0;
+                setTimeout(() => {
+                    bannerIdx = (bannerIdx + 1) % bannerTips.length;
+                    el.innerText = bannerTips[bannerIdx];
+                    el.style.opacity = 1;
+                }, 500);
+            }
+        }, 6000);
+
+        // UI 節點
+        const elTimer = document.getElementById('mainTimer');
+        const elShapeContainer = document.getElementById('activeShapeContainer');
+        let elActionText = document.getElementById('activeActionText');
+        const elTextContainer = document.getElementById('actionTextContainer');
+        const elActionHintBadge = document.getElementById('actionHintBadge');
+        const elProgressBar = document.getElementById('shapeProgressBar');
+        const elSelectedCountBadge = document.getElementById('selectedCountBadge');
+        const elStartWarning = document.getElementById('startWarning');
+        const elStartBtn = document.getElementById('startBtn');
+
+        function renderLegend() {
+            const grid = document.getElementById('legendGrid');
+            grid.innerHTML = shapeData.map(item => {
+                const isSelected = selectedShapeIds.has(item.id);
+                return `
+                    <div onclick="toggleShapeSelection(${item.id})" 
+                         class="action-card ${isSelected ? 'selected' : 'unselected'} relative rounded-2xl p-4 flex flex-col items-center justify-center border-2 shadow-sm">
+                        <div class="absolute top-2.5 right-2.5 w-6 h-6 rounded-full flex items-center justify-center ${isSelected ? 'bg-teal-600 text-white' : 'bg-slate-300 text-slate-500'} text-xs font-black shadow-sm transition">
+                            <i class="${isSelected ? 'fa-solid fa-check' : 'fa-solid fa-minus'}"></i>
+                        </div>
+                        <svg viewBox="0 0 100 100" class="w-16 h-16 md:w-20 md:h-20 mb-2.5" style="color: ${item.color}; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.15));">
+                            ${item.svg}
+                        </svg>
+                        <span class="text-sm font-bold text-slate-400 mb-1">${item.name}</span>
+                        <span class="text-lg md:text-xl font-black text-slate-800 text-center tracking-tight">${item.action}</span>
+                    </div>
+                `;
+            }).join('');
+            updateSelectionStatus();
+        }
+
+        function toggleShapeSelection(id) {
+            if (selectedShapeIds.has(id)) {
+                if (selectedShapeIds.size <= 3) {
+                    showValidationHint();
+                    return;
+                }
+                selectedShapeIds.delete(id);
+            } else {
+                selectedShapeIds.add(id);
+            }
+            renderLegend();
+        }
+
+        function selectAllShapes() {
+            selectedShapeIds = new Set(shapeData.map(s => s.id));
+            renderLegend();
+        }
+
+        function selectPresetThree() {
+            const shuffled = [...shapeData.map(s => s.id)].sort(() => 0.5 - Math.random());
+            selectedShapeIds = new Set(shuffled.slice(0, 3));
+            renderLegend();
+        }
+
+        function setGoldenMode() {
+            // 黃金模式：半蹲, 開合跳, 拍手, 雙手高舉過頭
+            selectedShapeIds = new Set([1, 2, 3, 7]);
+            document.getElementById('totalTime').value = "180";
+            document.getElementById('shapeDuration').value = "2.5";
+            document.getElementById('hintCount').value = "10";
+            document.getElementById('rhythmToggle').checked = true;
+            updateRhythmLabel();
+            renderLegend();
+        }
+
+        function updateSelectionStatus() {
+            const count = selectedShapeIds.size;
+            elSelectedCountBadge.innerText = `已選取：${count} / ${shapeData.length} 項動作`;
+            if (count < 3) {
+                elStartBtn.disabled = true;
+                elStartWarning.classList.remove('hidden');
+            } else {
+                elStartBtn.disabled = false;
+                elStartWarning.classList.add('hidden');
+            }
+        }
+
+        function showValidationHint() {
+            elStartWarning.classList.remove('hidden');
+            setTimeout(() => { if (selectedShapeIds.size >= 3) elStartWarning.classList.add('hidden'); }, 2500);
+        }
+
+        function updateRhythmLabel() {
+            const isChecked = document.getElementById('rhythmToggle').checked;
+            const label = document.getElementById('rhythmLabel');
+            label.innerText = isChecked ? '開啟' : '關閉';
+            label.className = isChecked ? 'ml-3 text-base font-black text-teal-700' : 'ml-3 text-base font-bold text-slate-400';
+        }
+
+        function showScreen(screenId) {
+            ['setupScreen', 'tipsScreen', 'countdownScreen', 'trainingScreen', 'endScreen'].forEach(id => {
+                document.getElementById(id).classList.add('hidden');
+            });
+            document.getElementById(screenId).classList.remove('hidden');
+        }
+
+        function toggleFullScreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    console.log(`Error attempting to enable fullscreen: ${err.message}`);
+                });
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                }
+            }
+        }
+
+        function initAudio() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        }
+
+        function playSynth(type) {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            
+            const now = audioCtx.currentTime;
+
+            if (type === 'countdown') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(440, now);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                osc.start(now); osc.stop(now + 0.3);
+            } else if (type === 'go') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(880, now);
+                gain.gain.setValueAtTime(0.4, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.6);
+                osc.start(now); osc.stop(now + 0.6);
+            } else if (type === 'rhythm') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.exponentialRampToValueAtTime(40, now + 0.1);
+                gain.gain.setValueAtTime(0.6, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+                osc.start(now); osc.stop(now + 0.15);
+            } else if (type === 'shape') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(900, now);
+                osc.frequency.exponentialRampToValueAtTime(400, now + 0.1);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                osc.start(now); osc.stop(now + 0.1);
+            } else if (type === 'end') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(440, now);
+                osc.frequency.setValueAtTime(659.25, now + 0.2);
+                osc.frequency.setValueAtTime(880, now + 0.4);
+                gain.gain.setValueAtTime(0.4, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 1);
+                osc.start(now); osc.stop(now + 1);
+            }
+        }
+
+        // 啟動第一階段：10秒訓練前叮嚀
+        function initiateWarmup() {
+            if (selectedShapeIds.size < 3) {
+                showValidationHint();
+                return;
+            }
+            initAudio();
+            
+            // 讀取設定檔
+            totalTimeSeconds = parseInt(document.getElementById('totalTime').value, 10);
+            shapeDurationSeconds = parseFloat(document.getElementById('shapeDuration').value);
+            hintMaxCount = parseInt(document.getElementById('hintCount').value, 10);
+            playRhythm = document.getElementById('rhythmToggle').checked;
+            
+            activeTrainingShapes = shapeData.filter(s => selectedShapeIds.has(s.id));
+            shapeCount = 0;
+
+            // 顯示 10秒 叮嚀畫面
+            showScreen('tipsScreen');
+            playSynth('shape');
+
+            const progressBar = document.getElementById('tipsProgressBar');
+            const cdText = document.getElementById('tipsCountdownText');
+            
+            // 重置進度條動畫
+            progressBar.style.transition = 'none';
+            progressBar.style.width = '100%';
+            void progressBar.offsetWidth; // 強制重繪
+            
+            // 啟動進度條動畫
+            progressBar.style.transition = 'width 10s linear';
+            progressBar.style.width = '0%';
+
+            let secondsLeft = 10;
+            cdText.innerText = secondsLeft;
+            
+            tipsInterval = setInterval(() => {
+                secondsLeft--;
+                if(secondsLeft >= 0) cdText.innerText = secondsLeft;
+            }, 1000);
+
+            tipsTimeout = setTimeout(() => {
+                clearInterval(tipsInterval);
+                startCountdown();
+            }, 10000);
+        }
+
+        // 提早跳過叮嚀畫面
+        function skipTips() {
+            clearInterval(tipsInterval);
+            clearTimeout(tipsTimeout);
+            startCountdown();
+        }
+
+        // 啟動第二階段：3-2-1 預備倒數
+        function startCountdown() {
+            showScreen('countdownScreen');
+            const cdText = document.getElementById('countdownText');
+            
+            let count = 3;
+            cdText.innerText = count;
+            cdText.className = "text-[200px] md:text-[280px] font-black text-white drop-shadow-[0_0_40px_rgba(45,212,191,0.8)] animate-countdown";
+            playSynth('countdown');
+
+            const cdInterval = setInterval(() => {
+                count--;
+                cdText.classList.remove('animate-countdown');
+                void cdText.offsetWidth; 
+                cdText.classList.add('animate-countdown');
+
+                if (count > 0) {
+                    cdText.innerText = count;
+                    playSynth('countdown');
+                } else if (count === 0) {
+                    cdText.innerText = "GO!";
+                    cdText.style.color = "#fbbf24";
+                    playSynth('go');
+                } else {
+                    clearInterval(cdInterval);
+                    startTrainingSession(); // 進入主訓練
+                }
+            }, 1000);
+        }
+
+        // 啟動第三階段：主訓練
+        function startTrainingSession() {
+            showScreen('trainingScreen');
+            elTimer.classList.remove('timer-danger');
+            elTextContainer.classList.remove('opacity-0'); 
+            
+            updateMainTimerDisplay();
+            showNextShape();
+            
+            mainTimerInterval = setInterval(() => {
+                totalTimeSeconds--;
+                updateMainTimerDisplay();
+                
+                if (totalTimeSeconds <= 10 && totalTimeSeconds > 0) {
+                    elTimer.classList.add('timer-danger');
+                }
+                if (totalTimeSeconds <= 0) {
+                    endTraining();
+                }
+            }, 1000);
+
+            currentShapeStartTime = Date.now();
+            progressInterval = setInterval(() => {
+                const now = Date.now();
+                const elapsed = now - currentShapeStartTime;
+                const durationMs = shapeDurationSeconds * 1000;
+                
+                let percent = (elapsed / durationMs) * 100;
+                if (percent >= 100) {
+                    percent = 100;
+                    showNextShape();
+                }
+                
+                elProgressBar.style.width = `${percent}%`;
+                
+                if (percent < 60) {
+                    elProgressBar.className = "h-full progress-bar-transition shadow-[0_0_20px_rgba(45,212,191,0.6)] bg-teal-400";
+                } else if (percent < 85) {
+                    elProgressBar.className = "h-full progress-bar-transition shadow-[0_0_20px_rgba(250,204,21,0.6)] bg-yellow-400";
+                } else {
+                    elProgressBar.className = "h-full progress-bar-transition shadow-[0_0_20px_rgba(239,68,68,0.6)] bg-red-500";
+                }
+            }, 50);
+        }
+
+        function updateMainTimerDisplay() {
+            const m = Math.floor(totalTimeSeconds / 60).toString().padStart(2, '0');
+            const s = (totalTimeSeconds % 60).toString().padStart(2, '0');
+            elTimer.innerText = `${m}:${s}`;
+        }
+
+        function showNextShape() {
+            if (activeTrainingShapes.length === 0) return;
+
+            let newIndex;
+            do {
+                newIndex = Math.floor(Math.random() * activeTrainingShapes.length);
+            } while (newIndex === currentShapeIndex && activeTrainingShapes.length > 1);
+            
+            currentShapeIndex = newIndex;
+            const target = activeTrainingShapes[currentShapeIndex];
+            shapeCount++;
+            
+            currentShapeStartTime = Date.now();
+            elProgressBar.style.width = '0%';
+            
+            if (playRhythm) playSynth('rhythm');
+            else playSynth('shape');
+            
+            elShapeContainer.innerHTML = `
+                <svg viewBox="0 0 100 100" class="w-full h-full animate-pop" style="color: ${target.color};">
+                    ${target.svg}
+                </svg>
+            `;
+            
+            if (shapeCount <= hintMaxCount) {
+                elTextContainer.classList.remove('opacity-0');
+                
+                let newText = elActionText.cloneNode(true);
+                newText.innerText = target.action;
+                newText.style.textShadow = `0 6px 25px ${target.color}90`;
+                elActionText.parentNode.replaceChild(newText, elActionText);
+                elActionText = newText;
+                
+                elActionHintBadge.innerHTML = `<i class="fa-solid fa-lightbulb mr-2 text-yellow-300"></i>提示 ${shapeCount} / ${hintMaxCount}`;
+            } else {
+                // 超過次數 -> 文字隱藏
+                elTextContainer.classList.add('opacity-0'); 
+            }
+        }
+
+        function endTraining() {
+            cleanupIntervals();
+            playSynth('end');
+            generateReviewGrid();
+            showScreen('endScreen');
+        }
+
+        function stopTraining() {
+            endTraining();
+        }
+
+        function resetApp() {
+            showScreen('setupScreen');
+            if (document.fullscreenElement && document.exitFullscreen) {
+                document.exitFullscreen();
+            }
+        }
+
+        function cleanupIntervals() {
+            clearInterval(mainTimerInterval);
+            clearInterval(progressInterval);
+            clearInterval(tipsInterval);
+            clearTimeout(tipsTimeout);
+        }
+
+        function generateReviewGrid() {
+            const grid = document.getElementById('reviewGrid');
+            grid.innerHTML = activeTrainingShapes.map(item => `
+                <div class="bg-slate-800/80 rounded-xl p-4 flex flex-col items-center border border-slate-600 shadow-lg">
+                    <svg viewBox="0 0 100 100" class="w-16 h-16 mb-3" style="color: ${item.color}; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3));">
+                        ${item.svg}
+                    </svg>
+                    <span class="text-sm text-slate-400 font-bold mb-1">${item.name}</span>
+                    <span class="text-xl font-black text-white">${item.action}</span>
+                </div>
+            `).join('');
+        }
+
+        window.onload = () => {
+            renderLegend();
+            showScreen('setupScreen');
+        };
+
+    </script>
+</body>
+</html>
